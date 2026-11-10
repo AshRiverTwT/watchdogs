@@ -14,7 +14,8 @@
     "db:generate": "pnpm --filter @watchdogs/db generate",
     "db:migrate": "pnpm --filter @watchdogs/db migrate",
     "seed:admin": "pnpm --filter @watchdogs/auth seed-admin",
-    "make-admin": "pnpm --filter @watchdogs/auth make-admin"
+    "make-admin": "pnpm --filter @watchdogs/auth make-admin",
+    "db:seed": "pnpm --filter @watchdogs/db seed"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

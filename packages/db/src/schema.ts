@@ -1,9 +1,14 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
+  check,
+  date,
   index,
+  integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -106,3 +111,139 @@ export const auditLog = pgTable(
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type EmailTokenKind = (typeof emailTokenKind.enumValues)[number];
+
+// ---------------------------------------------------------------- catalog
+
+export const formats = pgTable(
+  "formats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Stable slug, e.g. "2d", "dolby-3d". */
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /**
+     * Labels as BMS prints them on the showtimes page ("2D", "DOLBY 3D", "PCX 2D"...),
+     * upper-cased. Used to map scraped shows to a format.
+     */
+    bmsLabels: text("bms_labels").array().notNull().default(sql`'{}'::text[]`),
+    sortOrder: integer("sort_order").notNull().default(100),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("formats_code_key").on(t.code)],
+);
+
+export const placeKind = pgEnum("place_kind", ["city", "area"]);
+
+export const places = pgTable(
+  "places",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Areas point at their city; cities have no parent. */
+    parentId: uuid("parent_id").references((): AnyPgColumn => places.id, { onDelete: "restrict" }),
+    kind: placeKind("kind").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    /** BMS region code on city rows, e.g. "HYD". */
+    bmsRegionCode: text("bms_region_code"),
+    /** BMS region slug used in URLs, e.g. "hyderabad". */
+    bmsRegionSlug: text("bms_region_slug"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("places_slug_key").on(t.slug),
+    index("places_parent_idx").on(t.parentId),
+    check("places_city_has_no_parent", sql`(${t.kind} = 'city') = (${t.parentId} is null)`),
+  ],
+);
+
+export const theatres = pgTable(
+  "theatres",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The area the theatre is in. */
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    /** BMS venue code (e.g. "PVHB"); null until someone looks it up. */
+    bmsVenueCode: text("bms_venue_code"),
+    address: text("address"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("theatres_slug_key").on(t.slug),
+    uniqueIndex("theatres_bms_venue_code_key").on(t.bmsVenueCode),
+    index("theatres_place_idx").on(t.placeId),
+  ],
+);
+
+/** Which formats a theatre can screen; drives the format-vs-theatre warning on alerts. */
+export const theatreFormats = pgTable(
+  "theatre_formats",
+  {
+    theatreId: uuid("theatre_id")
+      .notNull()
+      .references(() => theatres.id, { onDelete: "cascade" }),
+    formatId: uuid("format_id")
+      .notNull()
+      .references(() => formats.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.theatreId, t.formatId] }), index("theatre_formats_format_idx").on(t.formatId)],
+);
+
+export const movieStatus = pgEnum("movie_status", ["upcoming", "now_showing", "archived"]);
+
+export const movies = pgTable(
+  "movies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    slug: text("slug").notNull(),
+    synopsis: text("synopsis"),
+    /** Original language, e.g. "Telugu". Per-language variants live in movie_bms_events. */
+    language: text("language"),
+    certificate: text("certificate"),
+    runtimeMin: integer("runtime_min"),
+    releaseDate: date("release_date"),
+    /** Path under /uploads/posters, set by the admin poster upload. */
+    posterPath: text("poster_path"),
+    status: movieStatus("status").notNull().default("upcoming"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("movies_slug_key").on(t.slug), index("movies_status_idx").on(t.status)],
+);
+
+/** BMS uses a separate ET… event code per language/format variant of one film. */
+export const movieBmsEvents = pgTable(
+  "movie_bms_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    movieId: uuid("movie_id")
+      .notNull()
+      .references(() => movies.id, { onDelete: "cascade" }),
+    eventCode: text("event_code").notNull(),
+    /** BMS URL slug for the event, e.g. "kalki-2898-ad". */
+    bmsSlug: text("bms_slug"),
+    language: text("language").notNull(),
+    /** Free text such as "3D" or "IMAX 2D" when BMS splits variants by format. */
+    formatHint: text("format_hint"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("movie_bms_events_code_key").on(t.eventCode), index("movie_bms_events_movie_idx").on(t.movieId)],
+);
+
+export type Format = typeof formats.$inferSelect;
+export type Place = typeof places.$inferSelect;
+export type Theatre = typeof theatres.$inferSelect;
+export type Movie = typeof movies.$inferSelect;
+export type MovieBmsEvent = typeof movieBmsEvents.$inferSelect;

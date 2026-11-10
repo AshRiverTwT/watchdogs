@@ -3,7 +3,7 @@
 Create an alert for a movie, dates, time window, format and theatre in Hyderabad,
 and get one email when a matching show opens for booking on BookMyShow.
 
-> Status: slice 1 (auth) done. See `docs/ARCHITECTURE.md` for the plan.
+> Status: slices 1 (auth) and 2 (catalog) done. See `docs/ARCHITECTURE.md` for the plan.
 
 ## Local development
 
@@ -19,11 +19,12 @@ pnpm install
 ```bash
 docker compose up -d postgres mailpit
 pnpm db:migrate
+pnpm db:seed
 pnpm seed:admin
 pnpm dev                  # web on :3000; Mailpit UI on :8025
 ```
 
-**Without Docker**: set these in `.env`, then run the same `db:migrate`, `seed:admin`, `dev` steps.
+**Without Docker**: set these in `.env`, then run the same `db:migrate`, `db:seed`, `seed:admin`, `dev` steps.
 PGlite is in-process Postgres, so only one process can open the database at a time
 (fine for the web app alone; the worker needs real Postgres).
 
@@ -40,6 +41,7 @@ MAIL_TRANSPORT=console    # emails are printed in the dev-server terminal
 | `pnpm typecheck` | `tsc --noEmit` in every package |
 | `pnpm db:generate` | Generate a SQL migration from `packages/db/src/schema.ts` |
 | `pnpm db:migrate` | Apply migrations to `DATABASE_URL` |
+| `pnpm db:seed` | Insert missing catalog rows (formats, Hyderabad areas and theatres, sample movies). Never overwrites edits. `SEED_SAMPLE_MOVIES=false` skips the fictional films |
 | `pnpm seed:admin` | Create or promote the admin from `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` |
 | `pnpm make-admin <email> [--revoke]` | Grant or remove the admin role |
 
@@ -56,6 +58,28 @@ MAIL_TRANSPORT=console    # emails are printed in the dev-server terminal
 - All mutations are Next.js server actions (POST-only, Origin checked against Host by Next).
 - Resetting a password signs out every device; changing it signs out every other device.
 - Roles: `user`, `admin`. Admin only through `seed:admin` or `make-admin`.
+
+## Catalog
+
+- **Formats**: 2D, 3D, Dolby 3D, EPIQ, PCX, HDR by Barco. Each has the labels BMS prints
+  (`bms_labels`), used to map scraped shows to a format.
+- **Places**: cities (with BMS region code, `HYD` for Hyderabad) and their areas.
+- **Theatres**: belong to an area, list the formats they screen, and carry a BMS venue code.
+  The seeded venues are real, but their venue codes are empty and their formats are only
+  2D/3D: check both on BookMyShow and correct them in the admin before relying on them.
+- **Movies**: one row per film, with one `movie_bms_events` row per BMS event code
+  (BMS uses a separate `ET…` code per language/format variant). The three seeded films are
+  fictional, with fake `ET9…` codes, for the mock source.
+
+Public read API (no auth, cached 30 s):
+
+| Endpoint | Notes |
+|---|---|
+| `GET /api/catalog/formats` | active formats in display order |
+| `GET /api/catalog/places` | cities with nested areas |
+| `GET /api/catalog/theatres?city=&area=&format=&q=` | ids are UUIDs; `q` matches theatre or area name |
+| `GET /api/catalog/movies?status=upcoming,now_showing&q=` | archived films are never listed |
+| `GET /api/catalog/movies/:slug` | language variants, without BMS event codes |
 
 ## Slice 0: BMS access check
 

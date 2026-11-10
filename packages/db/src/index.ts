@@ -26,3 +26,4 @@ export async function createDb(url = process.env.DATABASE_URL): Promise<Db> {
 
 export { schema };
 export * from "./schema";
+export * from "./queries/catalog";
