@@ -10,6 +10,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -72,8 +73,8 @@ export const emailTokens = pgTable(
     kind: emailTokenKind("kind").notNull(),
     /** SHA-256 of the token in the link. */
     tokenHash: text("token_hash").notNull(),
-    /** For pause links: which alert. FK added with the alerts table in slice 3. */
-    alertId: uuid("alert_id"),
+    /** For pause links: which alert. */
+    alertId: uuid("alert_id").references((): AnyPgColumn => alerts.id, { onDelete: "cascade" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -247,3 +248,127 @@ export type Place = typeof places.$inferSelect;
 export type Theatre = typeof theatres.$inferSelect;
 export type Movie = typeof movies.$inferSelect;
 export type MovieBmsEvent = typeof movieBmsEvents.$inferSelect;
+
+// ---------------------------------------------------------------- alerts
+
+export const alertStatus = pgEnum("alert_status", ["active", "paused", "fulfilled", "expired"]);
+export const alertMode = pgEnum("alert_mode", ["first_match", "keep_watching"]);
+
+export const alerts = pgTable(
+  "alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    movieId: uuid("movie_id")
+      .notNull()
+      .references(() => movies.id, { onDelete: "restrict" }),
+    /** The city whose BMS region is polled. */
+    cityId: uuid("city_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "restrict" }),
+    /** IST calendar dates, sorted; date ranges are expanded on save. */
+    dates: date("dates").array().notNull(),
+    /** IST wall-clock window, inclusive. */
+    timeStart: time("time_start").notNull(),
+    timeEnd: time("time_end").notNull(),
+    mode: alertMode("mode").notNull().default("first_match"),
+    status: alertStatus("status").notNull().default("active"),
+    lastMatchedAt: timestamp("last_matched_at", { withTimezone: true }),
+    /** Soft delete keeps notification history; deleted alerts are never matched. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("alerts_user_idx").on(t.userId),
+    index("alerts_status_idx").on(t.status).where(sql`${t.deletedAt} is null`),
+    check("alerts_time_window", sql`${t.timeStart} < ${t.timeEnd}`),
+    check("alerts_has_dates", sql`cardinality(${t.dates}) > 0`),
+  ],
+);
+
+/** Specific BMS variants (language/format). None means any variant of the movie. */
+export const alertEvents = pgTable(
+  "alert_events",
+  {
+    alertId: uuid("alert_id")
+      .notNull()
+      .references(() => alerts.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => movieBmsEvents.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.alertId, t.eventId] })],
+);
+
+/** None means any format. */
+export const alertFormats = pgTable(
+  "alert_formats",
+  {
+    alertId: uuid("alert_id")
+      .notNull()
+      .references(() => alerts.id, { onDelete: "cascade" }),
+    formatId: uuid("format_id")
+      .notNull()
+      .references(() => formats.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.alertId, t.formatId] })],
+);
+
+/** Theatres and areas together: a show matches if its theatre is listed or sits in a listed area. Both empty means anywhere in the city. */
+export const alertTheatres = pgTable(
+  "alert_theatres",
+  {
+    alertId: uuid("alert_id")
+      .notNull()
+      .references(() => alerts.id, { onDelete: "cascade" }),
+    theatreId: uuid("theatre_id")
+      .notNull()
+      .references(() => theatres.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.alertId, t.theatreId] }), index("alert_theatres_theatre_idx").on(t.theatreId)],
+);
+
+export const alertPlaces = pgTable(
+  "alert_places",
+  {
+    alertId: uuid("alert_id")
+      .notNull()
+      .references(() => alerts.id, { onDelete: "cascade" }),
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.alertId, t.placeId] })],
+);
+
+export const alertHistoryKind = pgEnum("alert_history_kind", [
+  "created",
+  "edited",
+  "paused",
+  "resumed",
+  "fulfilled",
+  "expired",
+  "deleted",
+  "matched",
+]);
+
+export const alertHistory = pgTable(
+  "alert_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    alertId: uuid("alert_id")
+      .notNull()
+      .references(() => alerts.id, { onDelete: "cascade" }),
+    kind: alertHistoryKind("kind").notNull(),
+    detail: text("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("alert_history_alert_idx").on(t.alertId, t.createdAt)],
+);
+
+export type Alert = typeof alerts.$inferSelect;
+export type AlertStatus = (typeof alertStatus.enumValues)[number];
+export type AlertHistoryKind = (typeof alertHistoryKind.enumValues)[number];

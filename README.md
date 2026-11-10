@@ -3,7 +3,7 @@
 Create an alert for a movie, dates, time window, format and theatre in Hyderabad,
 and get one email when a matching show opens for booking on BookMyShow.
 
-> Status: slices 1 (auth) and 2 (catalog) done. See `docs/ARCHITECTURE.md` for the plan.
+> Status: slices 1 (auth), 2 (catalog) and 3 (alerts) done. See `docs/ARCHITECTURE.md` for the plan.
 
 ## Local development
 
@@ -80,6 +80,26 @@ Public read API (no auth, cached 30 s):
 | `GET /api/catalog/theatres?city=&area=&format=&q=` | ids are UUIDs; `q` matches theatre or area name |
 | `GET /api/catalog/movies?status=upcoming,now_showing&q=` | archived films are never listed |
 | `GET /api/catalog/movies/:slug` | language variants, without BMS event codes |
+
+## Alerts
+
+An alert is one movie, a set of dates, a show-time window and optional filters:
+
+- **Dates**: IST calendar days, today up to 120 days ahead, at most 31 per alert. The form
+  adds single days or ranges; ranges are expanded to days on save.
+- **Time window**: shows whose start time falls inside it, both ends included (`18:00`–`22:30`
+  matches 18:00 and 22:30). Start must be before end; windows past midnight are not supported.
+- **Language, format, theatres, areas**: each is optional and empty means "any". A show
+  matches the place filter if its theatre is listed or sits in a listed area.
+- **Format warning**: if a chosen theatre is not known to screen a chosen format, saving asks
+  for confirmation instead of refusing, because the theatre list may be out of date.
+- **Mode**: `first_match` emails once and marks the alert fulfilled; `keep_watching` emails
+  for each new matching show until the dates pass.
+- **Status**: `active`, `paused`, `fulfilled`, `expired`. Pause/resume is immediate. Resuming
+  or editing a fulfilled alert re-arms it, but shows already emailed are never sent again.
+  Delete is a soft delete, so history stays. Alerts with no dates left read as expired.
+- **Limits**: 10 open (active or paused) alerts per user; only confirmed emails can create them.
+- Every change is recorded in `alert_history` and shown on the alert page.
 
 ## Slice 0: BMS access check
 
