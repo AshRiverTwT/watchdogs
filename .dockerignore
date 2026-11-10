@@ -1,0 +1,7 @@
+node_modules
+**/node_modules
+**/.next
+.env
+.git
+scripts/access-check/out
+.browser-profile

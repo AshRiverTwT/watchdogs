@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+coverage/
+.env
+.env.*.local
+*.log
+uploads/
+.browser-profile/
+scripts/access-check/out/
+*.tsbuildinfo
+next-env.d.ts

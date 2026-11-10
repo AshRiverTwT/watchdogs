@@ -1,0 +1,11 @@
+{
+  "name": "watchdogs-access-check",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.1"
+  }
+}

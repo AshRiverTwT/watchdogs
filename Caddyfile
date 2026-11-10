@@ -1,0 +1,4 @@
+# Replace with your domain; Caddy fetches the TLS certificate automatically.
+{$APP_DOMAIN:localhost} {
+  reverse_proxy web:3000
+}
