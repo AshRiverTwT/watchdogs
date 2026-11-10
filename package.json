@@ -2,13 +2,19 @@
   "name": "watchdogs",
   "private": true,
   "packageManager": "pnpm@9.15.0",
-  "engines": { "node": ">=20.11" },
+  "engines": {
+    "node": ">=22.9"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel --filter ./apps/* dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:generate": "pnpm --filter @watchdogs/db generate",
+    "db:migrate": "pnpm --filter @watchdogs/db migrate",
+    "seed:admin": "pnpm --filter @watchdogs/auth seed-admin",
+    "make-admin": "pnpm --filter @watchdogs/auth make-admin"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

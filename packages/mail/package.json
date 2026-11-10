@@ -5,5 +5,11 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "scripts": { "typecheck": "tsc --noEmit" }
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "nodemailer": "^7.0.10"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.3"
+  }
 }
